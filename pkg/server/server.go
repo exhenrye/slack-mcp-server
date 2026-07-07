@@ -139,6 +139,20 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 		),
 	), conversationsHandler.ConversationsDownloadFilesHandler)
 
+	s.AddTool(mcp.NewTool("conversations_delete_message",
+		mcp.WithDescription("Delete a single message (chat.delete) from a channel or DM by channel_id and message_ts. Disabled by default - set SLACK_MCP_DELETE_MESSAGE_TOOL env var to enable (true/1, comma-separated channel IDs, or '!CID' negation list)."),
+		mcp.WithTitleAnnotation("Delete Message"),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithString("channel_id",
+			mcp.Required(),
+			mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... or @... aka #general or @username_dm."),
+		),
+		mcp.WithString("message_ts",
+			mcp.Required(),
+			mcp.Description("Timestamp of the message to delete, format 1234567890.123456."),
+		),
+	), conversationsHandler.ConversationsDeleteMessageHandler)
+
 	conversationsSearchTool := mcp.NewTool("conversations_search_messages",
 		mcp.WithDescription("Search messages in a public channel, private channel, or direct message (DM, or IM) conversation using filters. All filters are optional, if not provided then search_query is required."),
 		mcp.WithTitleAnnotation("Search Messages"),

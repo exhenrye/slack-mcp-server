@@ -76,6 +76,7 @@ type SlackAPI interface {
 	GetUsersContext(ctx context.Context, options ...slack.GetUsersOption) ([]slack.User, error)
 	GetUsersInfo(users ...string) (*[]slack.User, error)
 	PostMessageContext(ctx context.Context, channel string, options ...slack.MsgOption) (string, string, error)
+	DeleteMessageContext(ctx context.Context, channel, timestamp string) (string, string, error)
 	MarkConversationContext(ctx context.Context, channel, ts string) error
 	UploadFileV2Context(ctx context.Context, params slack.UploadFileV2Parameters) (*slack.FileSummary, error)
 
@@ -284,6 +285,10 @@ func (c *MCPSlackClient) SearchContext(ctx context.Context, query string, params
 
 func (c *MCPSlackClient) PostMessageContext(ctx context.Context, channelID string, options ...slack.MsgOption) (string, string, error) {
 	return c.slackClient.PostMessageContext(ctx, channelID, options...)
+}
+
+func (c *MCPSlackClient) DeleteMessageContext(ctx context.Context, channelID, timestamp string) (string, string, error) {
+	return c.slackClient.DeleteMessageContext(ctx, channelID, timestamp)
 }
 
 func (c *MCPSlackClient) UploadFileV2Context(ctx context.Context, params slack.UploadFileV2Parameters) (*slack.FileSummary, error) {

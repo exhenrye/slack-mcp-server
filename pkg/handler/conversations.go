@@ -97,6 +97,17 @@ type downloadFilesParams struct {
 	outputDir string
 }
 
+type deleteMessageParams struct {
+	channel   string
+	messageTs string
+}
+
+type deleteMessageResult struct {
+	OK        bool   `json:"ok"`
+	ChannelID string `json:"channel_id"`
+	Ts        string `json:"ts"`
+}
+
 type uploadFileResult struct {
 	FileID    string `json:"file_id"`
 	Title     string `json:"title"`
@@ -259,6 +270,36 @@ func (ch *ConversationsHandler) ConversationsAddMessageHandler(ctx context.Conte
 
 	messages := ch.convertMessagesFromHistory(history.Messages, historyParams.ChannelID, false)
 	return marshalMessagesToCSV(messages)
+}
+
+// ConversationsDeleteMessageHandler deletes a single message (chat.delete) and
+// returns a small JSON confirmation. Disabled by default; enable per-channel via
+// the SLACK_MCP_DELETE_MESSAGE_TOOL env var (same policy syntax as the add/upload tools).
+func (ch *ConversationsHandler) ConversationsDeleteMessageHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ch.logger.Debug("ConversationsDeleteMessageHandler called", zap.Any("params", request.Params))
+
+	params, err := ch.parseParamsToolDeleteMessage(request)
+	if err != nil {
+		ch.logger.Error("Failed to parse delete-message params", zap.Error(err))
+		return nil, err
+	}
+
+	ch.logger.Debug("Deleting Slack message",
+		zap.String("channel", params.channel),
+		zap.String("ts", params.messageTs),
+	)
+	respChannel, respTs, err := ch.apiProvider.Slack().DeleteMessageContext(ctx, params.channel, params.messageTs)
+	if err != nil {
+		ch.logger.Error("Slack DeleteMessageContext failed", zap.Error(err))
+		return nil, err
+	}
+
+	out, err := json.Marshal(deleteMessageResult{OK: true, ChannelID: respChannel, Ts: respTs})
+	if err != nil {
+		ch.logger.Error("Failed to marshal delete result", zap.Error(err))
+		return nil, err
+	}
+	return mcp.NewToolResultText(string(out)), nil
 }
 
 // ConversationsHistoryHandler streams conversation history as CSV
@@ -595,6 +636,69 @@ func (ch *ConversationsHandler) parseParamsToolDownloadFiles(request mcp.CallToo
 		messageTs: messageTs,
 		outputDir: request.GetString("output_dir", ""),
 	}, nil
+}
+
+func (ch *ConversationsHandler) parseParamsToolDeleteMessage(request mcp.CallToolRequest) (*deleteMessageParams, error) {
+	toolConfig := os.Getenv("SLACK_MCP_DELETE_MESSAGE_TOOL")
+	if toolConfig == "" {
+		ch.logger.Error("Delete-message tool disabled by default")
+		return nil, errors.New(
+			"by default, the conversations_delete_message tool is disabled to guard Slack workspaces against accidental deletions. " +
+				"To enable it, set the SLACK_MCP_DELETE_MESSAGE_TOOL environment variable to true, 1, or a comma separated list of channels " +
+				"to limit where the MCP can delete messages, e.g. 'SLACK_MCP_DELETE_MESSAGE_TOOL=C1234567890,D0987654321', 'SLACK_MCP_DELETE_MESSAGE_TOOL=!C1234567890' " +
+				"to enable all except one or 'SLACK_MCP_DELETE_MESSAGE_TOOL=true' for all channels and DMs",
+		)
+	}
+
+	channel := request.GetString("channel_id", "")
+	if channel == "" {
+		return nil, errors.New("channel_id must be a string")
+	}
+	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
+		channelsMaps := ch.apiProvider.ProvideChannelsMaps()
+		chn, ok := channelsMaps.ChannelsInv[channel]
+		if !ok {
+			ch.logger.Error("Channel not found", zap.String("channel", channel))
+			return nil, fmt.Errorf("channel %q not found", channel)
+		}
+		channel = channelsMaps.Channels[chn].ID
+	}
+	if !isDeleteChannelAllowed(channel) {
+		ch.logger.Warn("Delete-message tool not allowed for channel", zap.String("channel", channel), zap.String("policy", toolConfig))
+		return nil, fmt.Errorf("conversations_delete_message tool is not allowed for channel %q, applied policy: %s", channel, toolConfig)
+	}
+
+	messageTs := request.GetString("message_ts", "")
+	if messageTs == "" || !strings.Contains(messageTs, ".") {
+		return nil, errors.New("message_ts must be a valid timestamp in format 1234567890.123456")
+	}
+
+	return &deleteMessageParams{
+		channel:   channel,
+		messageTs: messageTs,
+	}, nil
+}
+
+func isDeleteChannelAllowed(channel string) bool {
+	config := os.Getenv("SLACK_MCP_DELETE_MESSAGE_TOOL")
+	if config == "" || config == "true" || config == "1" {
+		return config != ""
+	}
+	items := strings.Split(config, ",")
+	isNegated := strings.HasPrefix(strings.TrimSpace(items[0]), "!")
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if isNegated {
+			if strings.TrimPrefix(item, "!") == channel {
+				return false
+			}
+		} else {
+			if item == channel {
+				return true
+			}
+		}
+	}
+	return isNegated
 }
 
 func isUploadChannelAllowed(channel string) bool {
