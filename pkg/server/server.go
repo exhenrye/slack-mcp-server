@@ -153,6 +153,36 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 		),
 	), conversationsHandler.ConversationsDeleteMessageHandler)
 
+	s.AddTool(mcp.NewTool("conversations_create",
+		mcp.WithDescription("Create a Slack channel (conversations.create) and optionally invite users. Disabled by default - set SLACK_MCP_CHANNEL_MANAGEMENT_TOOL=true to enable."),
+		mcp.WithTitleAnnotation("Create Channel"),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Channel name: lowercase letters, numbers, hyphens, underscores; max 80 characters. A leading # is ignored."),
+		),
+		mcp.WithBoolean("is_private",
+			mcp.Description("Create a private channel. Default false (public)."),
+		),
+		mcp.WithString("users",
+			mcp.Description("Optional comma-separated users to invite: user IDs (Uxxxx), @handles, or exact full names. Unknown or ambiguous names fail the call before anything is created."),
+		),
+	), conversationsHandler.ConversationsCreateHandler)
+
+	s.AddTool(mcp.NewTool("conversations_invite",
+		mcp.WithDescription("Invite users to an existing channel (conversations.invite). Disabled by default - set SLACK_MCP_CHANNEL_MANAGEMENT_TOOL=true to enable."),
+		mcp.WithTitleAnnotation("Invite to Channel"),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithString("channel_id",
+			mcp.Required(),
+			mcp.Description("Channel ID (Cxxxxxxxxxx) or #name if the channel is already cached."),
+		),
+		mcp.WithString("users",
+			mcp.Required(),
+			mcp.Description("Comma-separated users to invite: user IDs (Uxxxx), @handles, or exact full names."),
+		),
+	), conversationsHandler.ConversationsInviteHandler)
+
 	conversationsSearchTool := mcp.NewTool("conversations_search_messages",
 		mcp.WithDescription("Search messages in a public channel, private channel, or direct message (DM, or IM) conversation using filters. All filters are optional, if not provided then search_query is required."),
 		mcp.WithTitleAnnotation("Search Messages"),
