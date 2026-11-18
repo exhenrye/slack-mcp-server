@@ -142,8 +142,10 @@ func (ch *ConversationsHandler) resolveUserIDs(raw string) ([]string, error) {
 	return ids, nil
 }
 
+var userIDPattern = regexp.MustCompile(`^[UW][A-Z0-9]{8,}$`)
+
 func resolveUserID(item string, users map[string]slack.User, usersInv map[string]string) (string, error) {
-	if _, ok := users[item]; ok {
+	if _, ok := users[item]; ok || userIDPattern.MatchString(item) {
 		return item, nil
 	}
 	handle := strings.ToLower(strings.TrimPrefix(item, "@"))

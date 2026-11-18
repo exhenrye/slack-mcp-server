@@ -21,6 +21,8 @@ func TestResolveUserID(t *testing.T) {
 		wantErr bool
 	}{
 		{"U1", "U1", false},
+		{"U0BGXPH12MQ", "U0BGXPH12MQ", false}, // real ID missing from the user cache
+		{"UNKNOWN", "", true},                 // too short to be an ID
 		{"@evandro", "U1", false},
 		{"evandro", "U1", false},
 		{"evandro mendonça", "U1", false},
